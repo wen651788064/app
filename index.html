@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%; width: 100%; overflow: hidden;">
+<head>
+    <meta charset="UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <!-- import Vue before Element -->
+    <script src="https://unpkg.com/vue/dist/vue.js"></script>
+    <!-- import JavaScript -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <!-- import CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="./rxjs.js"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body style="height: 100%; width: 100%; overflow: hidden;">
+
+<div style="height: 100%; width: 100%; overflow: hidden;   display: flex; justify-content: center; align-items: center; flex-wrap: wrap; flex-direction: column;" id="app">
+    <div v-if="!begin" style="text-align: center">
+      <div style="padding: 10px 0;">Please choose your role</div>
+      <div style="padding: 10px 0;">
+          <el-radio v-model="radio" label="1">police</el-radio>
+          <el-radio v-model="radio" label="2">thief</el-radio>
+      </div>
+      <el-button style="margin: 10px 0;" @click="clickEvent" type="primary">ok</el-button>
+    </div>
+    <div v-else>
+        <div style="width: 200px; height: 100px; border-radius: 8px; color: black; background: rgb(202, 102, 26); display: flex; text-align: center; justify-content: center; align-items: center; position: absolute;  border: 1px solid #000; left: calc((100% - 200px) / 2); top: 0;">Rice</div>
+        <div v-for="item in policeList" v-if="item.type" :style="`width: 50px;  border: 1px solid #000; height: 50px; border-radius: 50%; background: rgb(252, 13, 17); display: flex; justify-content: center; align-items: center; position: absolute; top: ${item.y}px; left: ${item.x}px;`">
+            {{item['nickname']}}
+        </div>
+        <div style="width: 300px; height: 200px; border-radius: 1px; color: black; background: rgb(133, 253, 49); display: flex; text-align: center; border: 1px solid #000; justify-content: center; align-items: center; position: absolute; left: calc((100% - 300px) / 2); bottom: 0;">
+            <div v-for="item in thiefList" v-if="item.type" :style="`width: 50px; border: 1px solid #000;  height: 50px; border-radius: 50%; background: rgb(11, 31, 251); display: flex; justify-content: center; align-items: center; position: absolute; bottom: ${item.y}px; left: ${item.x}px;`">
+                {{item['nickname']}}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript" language="JavaScript">
+
+    new Vue({
+        el: '#app',
+        data: function() {
+            return {
+                radio: '1',
+                begin:false,
+                ws: null,
+                name: '',
+                policeList: [],
+                thiefList: [],
+                currentPlayer: 0,
+                interval: null,
+            }
+        },
+        mounted() {
+          this.ws  = new WebSocket('ws://127.0.0.1:3000');
+          this.ws.onmessage = (e) => this.message(e);
+          this.ws.onopen = () => {
+              this.ws.send(JSON.stringify({
+                  type: 'login',
+              }));
+          };
+          this.userEvent();
+          this.interval = Rx.Observable.interval(50);
+          window.addEventListener('beforeunload', e => this.beforeunloadFn(e));
+        },
+        methods: {
+            clickEvent() {
+                this.begin = true;
+                let ws = this.ws;
+                let nickname =  this.radio === '1' ? `p${this.policeList.length}` : `t${this.thiefList.length}`;
+                let width = window.innerWidth;
+                let qW = 50;
+                if(this.radio === '1') {
+                    let x = this.getRandomIntInclusive(50, width - qW);
+                    let y = this.getRandomIntInclusive(105, 205);
+                    this.policeList.push({
+                        nickname,
+                        x,
+                        y,
+                        type: true,
+                    });
+                    this.currentPlayer = this.policeList.length;
+                } else {
+                    let x = this.getRandomIntInclusive(50, 260);
+                    let y = this.getRandomIntInclusive(0, 200 - qW);
+                    this.thiefList.push({
+                        nickname,
+                        x,
+                        y,
+                        type: true,
+                    });
+                    this.currentPlayer = this.thiefList.length;
+                }
+                let data = {
+                    type: 'message',
+                    thiefList: this.thiefList,
+                    policeList: this.policeList,
+                };
+                this.name = data.nickname;
+                ws.send(JSON.stringify(data))
+            },
+            message(e) {
+                let data = JSON.parse(e.data);
+
+                this.thiefList = data.list.thiefList;
+                this.policeList = data.list.policeList;
+            },
+            userEvent() {
+
+            },
+            beforeunloadFn() {
+                if(this.begin === false) {
+                    return;
+                }
+                if(this.radio === '1') {
+                    this.policeList[this.currentPlayer - 1].type = false;
+                } else {
+                    this.thiefList[this.currentPlayer - 1].type = false;
+                }
+                this.ws.send(JSON.stringify({
+                    type: 'message',
+                    thiefList: this.thiefList,
+                    policeList: this.policeList,
+                }));
+            },
+            getRandomIntInclusive(min, max) {
+                min = Math.ceil(min);
+                max = Math.floor(max);
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+        }
+    })
+
+    //定义全局的变量
+    // let ws = null;
+    //
+    //
+    // //封装创建Div并且发送消息的函数
+    // const createChatDiv = (data)=> {
+    //     let div = document.createElement('div');
+    //     let p_time = document.createElement('p');
+    //     let p_content = document.createElement('p');
+    //     switch (data.type) {
+    //         case 'serverInformation':
+    //             p_time.innerHTML = new Date().Format("yyyy-MM-dd hh:mm:ss");
+    //             p_content.innerHTML = data.message;
+    //             break;
+    //         case  'chat':
+    //             p_time.innerHTML = new Date().Format("yyyy-MM-dd hh:mm:ss");
+    //             p_content.innerHTML = data.name+":"+data.message;
+    //             break;
+    //         default:
+    //             break;
+    //     }
+    //
+    //     p_time.setAttribute('class' ,'time');
+    //     p_content.setAttribute('class','content');
+    //
+    //     div.appendChild(p_time);
+    //     div.appendChild(p_content);
+    //
+    //     return div;
+    // };
+    //
+    // //封装发送消息的函数
+    // const send = ()=>{
+    //     let message = document.getElementById('message');
+    //
+    //     //设置不能够发送空消息
+    //     if(!message.value){
+    //         return
+    //     }
+    //     let data = {
+    //         type:'chat',
+    //         message:message.value
+    //     };
+    //     ws.send(JSON.stringify(data));
+    //     message.value = ""
+    // };
+
+    // let setName = document.getElementById('setName');
+    // setName.onclick = ()=> {
+    //     let userName = document.getElementById('userName');
+    //     let nickName = "我没有起名字";
+    //     if (userName.value) {
+    //         nickName = userName.value;
+    //     }
+    //
+    //
+    //     //建立连接,并发送连接进入房间(并且连接会一直保存,进行服务端的轮询)
+    //     ws = new WebSocket('ws://127.0.0.1:3000');
+    //
+    //     //连接上来的时候
+    //     ws.onopen = () => {
+    //         let data = {
+    //             type: 'setName',
+    //             nickname: nickName
+    //         };
+    //         ws.send(JSON.stringify(data))
+    //     };
+    //
+    //     //发送消息的时候
+    //     document.getElementById('sendMessage').onclick = ()=>{
+    //         send();
+    //     };
+    //
+    //
+    //     //当接受服务端的请求的时候
+    //     ws.onmessage = (e) => {
+    //         let data = JSON.parse(e.data);
+    //         console.log(data);
+    //
+    //         //接受的消息为连接的人的个数的时候
+    //         if (data.type === 'chatterList') {
+    //             let list = data.list;
+    //             let length = list.length;
+    //             let userList = document.getElementById('userList');
+    //             document.getElementById('onLine').innerText = `在线人数${length}人`;
+    //
+    //             for(let i=0;i<list.length;i++){
+    //                 let p_user = document.createElement('p');
+    //                 p_user.setAttribute('class','userList-item');
+    //                 p_user.innerText = list[i].name;
+    //                 userList.appendChild(p_user)
+    //             }
+    //         }
+    //
+    //         //当为接受消息的或者用户进入新房间的时候
+    //         else {
+    //             let oldContent = document.getElementById('content');
+    //             oldContent.appendChild(createChatDiv(data))
+    //         }
+    //
+    //         //设置名字不能再改,以及不能改名字
+    //         setName.setAttribute('disabled',true);
+    //         let userName = document.getElementById('userName');
+    //         userName.setAttribute('disabled',true);
+    //         setName.style.display = "none";
+    //
+    //     };
+    //
+    // }
+
+</script>
+</body>
+</html>
